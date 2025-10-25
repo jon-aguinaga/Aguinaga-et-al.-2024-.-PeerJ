@@ -1,0 +1,270 @@
+---
+title: "YSP 2022_Aggression and social behavior under risk"
+author: "K Laskowski"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+In Summer 2022, our two YSP students Sophia and Ishita tested whether Amazon mollies altered their 1) aggressive and 2) sociable behavior when under the threat of predation risk. They designed two assays to measure these behaviors and then repeatedly measured individual fish in either or both contexts (with risk, or without risk). 
+
+Aggressive behavior: 
+Study measures bites as count data for the duration of an X minute trial Absence of risk (N = 10), Presence of risk (N = 10) were tested 2x each for their specific treatment. No individual experienced both treatments. 1 individual per treatment died (Total N = 18, or N = 9 per treatment)
+
+Sociabillity:
+Study measures association time with conspecific 3N  for the duration of an X minute trial. N = 10 3N mollies. All fish experienced both treatments in a balanced design. Each fish was tested in control and presence settings (3 trials each, for a total of 6 trials per fish). No deaths.
+
+# Load data
+
+```{r}
+library(lme4)
+library(lmerTest)
+library(tidyverse)
+library(patchwork)
+library(ggplot2)
+library(dplyr)
+library(ggpubr)
+
+#Kate's computer
+#setwd("C:/Users/katel/Box Sync/YSP data")
+
+#agg.data <- read.csv("Risk response YSP.csv")
+#social.data <- read.csv("sociability YSP.csv")
+
+#Jons computer
+social.data <- read.csv("C:/Users/jonag/Box/Laskowski Lab/Jon/Young Scholars Program/YSP 2022/YSP 2022 Manuscript/sociability YSP (1).csv")
+
+agg.data <- read.csv("C:/Users/jonag/Box/Laskowski Lab/Jon/Young Scholars Program/YSP 2022/YSP 2022 Manuscript/Risk response YSP (1).csv")
+
+
+```
+
+# Data cleaning
+
+Jon provided the data in a few different files. Here I clean up the data to compile each behavioral assay into one data file. This code no longer needs to be run as the cleaned files are loaded up above. 
+
+```{r data cleaning, eval = F}
+
+dataAbsence <- read.csv("IshitaYSPAbsenceCSV.csv")
+
+data <- dataAbsence %>%
+  select(ID, T1A, T2A) %>%
+  pivot_longer(!ID, names_to = "trial", values_to = "bites") %>%
+  mutate(trial = replace(trial, trial == "T1A", 1),
+         trial = replace(trial, trial == "T2A", 2),
+         context = "Predator absent")
+
+dataPresence <- read.csv("IshitaYSPPresenceCSV.csv")
+
+data2 <- dataPresence %>%
+  pivot_longer(!ID, names_to = "trial", values_to = "bites") %>%
+  mutate(trial = replace(trial, trial == "T1P", 1),
+         trial = replace(trial, trial == "T2P", 2),
+         context = "Predator present")
+
+risk.behav <- rbind(data, data2)
+#write.csv(risk.behav, file = "Risk response YSP.csv")
+
+####
+
+sophia <- read.csv("SophiaYSPCSV.csv")
+
+sophia2 <- sophia %>%
+ pivot_longer(!ID, names_to = "trial", values_to = "total_time") %>%
+  mutate(context = ifelse(trial == "T1A" | trial == "T2A" | trial == "T3A", "Predator absent", "Predator present")) %>%
+  mutate(trial = replace(trial, trial == "T1A" | trial == "T4P", 1),
+         trial = replace(trial, trial == "T2A" | trial == "T5P", 2),
+         trial = replace(trial, trial == "T3A" | trial == "T6P", 3))
+
+#write.csv(sophia2, file = "sociability YSP.csv")
+
+```
+
+# Aggression data 
+
+Testing to see whether number of bites differs based on the context (pred present, pred absent) or across trials. 
+```{r aggression testing}
+
+mod1.agg <- lmer(bites ~ trial *context + (1|ID), data = agg.data)
+ranova(mod1.agg) # no evidence of individual differences here
+anova(mod1.agg) # no evidence of strong differences across context, or trial 
+summary(mod1.agg)
+
+```
+Because we have such a small sample size though and we didn't necessary expect there to be a strong interaction between context and trial, let's remove that interaction and re-run the model
+
+```{r}
+mod2.agg <- lmer(bites ~ trial  + context + (1|ID), data = agg.data)
+ranova(mod2.agg)
+anova(mod2.agg)
+summary(mod2.agg)
+```
+
+Getting lots of singular fit warnings because ID accounts for no variance so will re-run without ID results still the same - no strong difference in bites across trials or contexts
+
+```{r}
+mod1.agglm <- lm(bites ~ trial*context, data = agg.data)
+anova(mod1.agglm)
+```
+
+# Sociability data
+
+Now let's compare whether total time spent associating with a conspecific differed across contexts or trials
+
+```{r sociability}
+
+mod1.soc <- lmer(total_time ~ trial * context + (1|ID), data = social.data)
+ranova(mod1.soc) # significant effect of individual
+anova(mod1.soc)
+summary(mod1.soc)
+
+```
+
+Again because our sample size is so small and we didn't really expect a strong interaction, let's remove the interaction and re-run the model 
+
+We see a significant effect of individual and context - fish spend more time associating with their conspecific when a predator is present (which is exactly we expect it). We should report the parameter estimates, se and t-values from the summary and then the F-stats and p-values from teh anova()
+
+```{r}
+mod2.soc <- lmer(total_time ~ trial + context + (1|ID), data = social.data)
+ranova(mod2.soc)
+anova(mod2.soc)
+summary(mod2.soc)
+
+```
+
+We can also estimate the repeatability of individual - about 0.25
+```{r}
+summary(mod2.soc)
+6676/(6676+19519)
+```
+
+# Figures 
+
+```{r}
+agg.data$trial <- factor(agg.data$trial)
+social.data$trial <- factor(social.data$trial)
+
+agg.data <- agg.data%>%
+  mutate(context = recode(context, 
+                          "Predator absent" = "Control",
+                          "Predator present" = "Risk cue"))
+
+social.data <- social.data%>%
+  mutate(context = recode(context, 
+                          "Predator absent" = "Control",
+                          "Predator present" = "Risk cue"))
+
+agg.plot <- ggplot(agg.data, aes(x = trial, y = bites, fill = context)) +
+  stat_summary(fun.y = "mean", geom = "point", position = position_dodge(0.8), size = 5, show.legend = FALSE) +
+  geom_line(data = agg.data[agg.data$context =="Control",], 
+            aes(x = trial, y = bites, group = ID, color = context), 
+            position = position_nudge(x = -0.19),
+            linewidth = 1, color = "orchid", alpha = 0.7) +
+  geom_point(data = agg.data[agg.data$context =="Control",], 
+             aes(x = trial, y = bites, group = ID, color = context), 
+             position = position_nudge(x = -0.19),
+             size = 2, shape = 21, fill = "orchid") +
+  geom_line(data = agg.data[agg.data$context =="Risk cue",], 
+            aes(x = trial, y = bites, group = ID, color = context), 
+            position = position_nudge(x = 0.19),
+            linewidth = 1, color = "turquoise", alpha = 0.7) +
+  geom_point(data = agg.data[agg.data$context == "Risk cue",], 
+             aes(x = trial, y = bites, group = ID, color = context), 
+             position = position_nudge(x = 0.19),
+             size = 2, shape = 21, fill = "turquoise") +
+  geom_boxplot(data = agg.data, aes(x = trial, y = bites, fill = context), alpha = 0.7) +
+  scale_fill_manual(values = c("orchid", "turquoise")) +
+  ylab("Number of bites") +
+  xlab("") +
+  theme_classic() +
+  theme(legend.title = element_blank(),
+       legend.position = c(0.18, 0.8),
+        legend.text = element_text(size = 10)) +
+  annotate("text", label = "a.", x = 0.5, y = 180, size = 6)
+
+agg.plot
+
+
+agg.plot2 <- ggplot(data = agg.data) + 
+  geom_boxplot(aes(x = context, y = bites, fill = context)) +
+  scale_fill_manual(values = c("orchid", "turquoise")) +
+  scale_x_discrete(labels = c("Risk cue" = "High risk",
+                              "Control" = "Low risk")) +
+  ylab("Number of bites") +
+  xlab("") +
+  theme_classic() +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(size = 14),  # x-axis tick labels
+    axis.text.y = element_text(size = 14),  # y-axis tick labels
+    axis.title.y = element_text(size = 16)  # y-axis title
+  )
+
+
+
+agg.plot2
+
+ggsave(agg.plot2, file = "Aggression2.png", height = 140, width = 140, units = "mm", dpi = 600)
+
+
+soc.plot <- ggplot(social.data, aes(x = trial, y = total_time, fill = context)) + 
+  stat_summary(fun.y = "mean", geom = "point", position = position_dodge(0.8), size = 5, show.legend = FALSE) +
+  geom_line(data = social.data[social.data$context =="Control",], 
+            aes(x = trial, y = total_time, group = ID, color = context), 
+            position = position_nudge(x = -0.19),
+            linewidth = 1, color = "orchid", alpha = 0.7) +
+  geom_point(data = social.data[social.data$context =="Control",], 
+             aes(x = trial, y = total_time, group = ID, color = context), 
+             position = position_nudge(x = -0.19),
+             size = 2.5, shape = 21, fill = "orchid") +
+  geom_line(data = social.data[social.data$context =="Risk cue",], 
+            aes(x = trial, y = total_time, group = ID, color = context), 
+            position = position_nudge(x = 0.19),
+            linewidth = 1, color = "turquoise", alpha = 0.7) +
+  geom_point(data = social.data[social.data$context == "Risk cue",], 
+             aes(x = trial, y = total_time, group = ID, color = context), 
+             position = position_nudge(x = 0.19),
+             size = 2.5, shape = 21, fill = "turquoise") +
+  geom_boxplot(data = social.data, aes(x = trial, y = total_time, fill = context), alpha = 0.7) +
+  scale_fill_manual(values = c("orchid", "turquoise")) +
+  ylab("Total time with conspecific (sec)") +
+  xlab("Trial") +
+  theme_classic() +
+  theme(legend.title = element_blank(),
+        legend.position = "none") +
+    annotate("text", label = "b.", x = 0.55, y = 820, size = 6)
+
+soc.plot2 <- ggplot(data = social.data) + 
+  geom_boxplot(aes(x = context, y = total_time, fill = context)) +
+  scale_fill_manual(values = c("orchid", "turquoise")) +
+  scale_x_discrete(labels = c("Risk cue" = "High risk",
+                              "Control" = "Low risk")) +
+  ylab("Time associating with conspecific (s)") +
+  xlab("") +
+  theme_classic() +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(size = 14),  # x-axis tick labels
+    axis.text.y = element_text(size = 14),  # y-axis tick labels
+    axis.title.y = element_text(size = 16)  # y-axis title
+  )
+
+soc.plot2
+
+
+ggsave(soc.plot2, file = "Social2.png", height = 140, width = 140, units = "mm", dpi = 600)
+
+
+
+
+
+fig <- ggpubr::ggarrange(agg.plot, soc.plot, ncol = 1)
+
+ggsave(fig, file = "YSP figures.png", height = 180, width = 120, units = "mm", dpi = 600)
+
+
+
+
+```
+
